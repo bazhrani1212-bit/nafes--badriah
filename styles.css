@@ -25,7 +25,7 @@ h1 {
   font-size: 2rem;
 }
 
-/* تنسيق نص الاعتماد في رأس الصفحة */
+/* تنسيق نص الاعتماد */
 .credit {
   margin: 0;
   font-size: 0.9rem;
@@ -97,7 +97,7 @@ button:disabled {
   font-size: 1rem;
   padding: 0.5rem;
   border-radius: 4px;
-  display: none; /* تُظهر عند الحاجة */
+  display: none; /* تظهر عند الحاجة */
 }
 .feedback.correct {
   background-color: #e8f5e9;
@@ -110,7 +110,7 @@ button:disabled {
   border: 1px solid #ffcdd2;
 }
 
-/* تنسيق أزرار المساعدة (استبعاد وترشيح) */
+/* تنسيق أزرار المساعدة */
 .assist-buttons {
   margin-top: 1rem;
   display: flex;
