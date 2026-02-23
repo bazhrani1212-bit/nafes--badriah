@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>منصة اختبار نافس لمادة العلوم – الصف السادس</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>اختبار نافس لمادة العلوم</h1>
+      <p class="credit">إعداد وتصميم المعلمة بدرية محمد الزهراني – الإبتدائية السادسة والثلاثون</p>
+      <p>
+        هذه المنصة تتيح لطالبات الصف السادس التدرب على نماذج اختبار نافس في مادة
+        العلوم. تم تقسيم المحتوى إلى أقسام تماثل الاختبارات التجريبية الموجودة
+        في مذكرة «ناڤس علوم سادس – نسخة الطالبة». بعد إدخال المعلومات الشخصية
+        ستظهر الأسئلة وسيتم تقييم الإجابات وإظهار التعليقات الذكية.
+      </p>
+    </header>
+
+    <section id="infoSection">
+      <h2>المعلومات الشخصية</h2>
+      <form id="infoForm">
+        <label for="studentName">اسم الطالبة:</label>
+        <input type="text" id="studentName" name="studentName" required />
+        <label for="schoolName">المدرسة:</label>
+        <input type="text" id="schoolName" name="schoolName" required />
+        <button type="submit">ابدئي الاختبار</button>
+      </form>
+    </section>
+
+    <!-- سيتم إظهار محتوى الاختبارات بعد إدخال المعلومات -->
+    <section id="quizSection" style="display: none">
+      <h2>الأسئلة</h2>
+      <div id="questionContainer"></div>
+      <!-- منطقة تظهر فيها رسائل التغذية الراجعة -->
+      <div id="feedback" class="feedback"></div>
+      <!-- أزرار المساعدة: استبعاد إجابتين وترشيح الإجابة -->
+      <div id="assistButtons" class="assist-buttons" style="display: none">
+        <button id="eliminateButton" type="button">استبعاد إجابتين</button>
+        <button id="suggestButton" type="button">ترشيح الإجابة</button>
+      </div>
+      <div id="navigation" class="nav-buttons">
+        <button id="prevButton" disabled>السؤال السابق</button>
+        <button id="nextButton">السؤال التالي</button>
+        <button id="submitButton" style="display: none">إرسال الإجابات</button>
+      </div>
+      <div id="resultContainer" class="results"></div>
+    </section>
+
+    <footer>
+      <p>
+        جميع الأسئلة مستوحاة من المذكرة الرسمية لوزارة التعليم السعودي
+        «مذكرة نافس علوم سادس – نسخة الطالبة» الصادرة عام 1446 هـ (2025 م).
+        يرجى استخدام هذا التطبيق لأغراض تعليمية فقط.
+      </p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
