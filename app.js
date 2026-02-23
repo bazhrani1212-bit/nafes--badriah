@@ -1,10 +1,11 @@
 /*
- * ملف جافاسكريبت يدير عرض الأسئلة وتسجيل النتائج والتغذية الراجعة.
- * يحتوي على ميزتي “استبعاد إجابتين” يدويًا و“ترشيح الإجابة” وإظهار سببها.
- * يقوم أيضًا بإرسال بيانات الطالبات إلى Google Sheets عبر تطبيق Apps Script.
+ * ملف جافاسكريبت يدير عرض الأسئلة وتسجيل النتائج.
+ * يعتمد على بنية بيانات للأسئلة تحاكي نماذج نافس.
+ * كما يحتوي على وظائف لإرسال البيانات إلى Google Sheets عبر Web App.
  */
 
-// تعريف الاختبارات والأسئلة (يمكن إضافة اختبارات أخرى بنفس النمط)
+// مصفوفة الأسئلة لكل اختبار. كل عنصر يحتوي على عنوان الاختبار ومصفوفة من الأسئلة.
+// تم إدراج الأسئلة الواردة في المذكرة «نافِس علوم سادس – نسخة الطالبة» (الاختبارات 1‑5).
 const tests = [
   {
     title: "الاختبار التجريبي (1)",
@@ -278,7 +279,6 @@ const tests = [
   }
 ];
 
-// مؤشرات لاختبار والسؤال الحالي
 let currentTestIndex = 0;
 let currentQuestionIndex = 0;
 let answers = [];
@@ -286,18 +286,17 @@ let answers = [];
 // عناصر المساعدة
 const assistButtons = document.getElementById("assistButtons");
 const eliminateButton = document.getElementById("eliminateButton");
-const suggestButton = document.getElementById("suggestButton");
 
 // عنصر التغذية الراجعة
 const feedbackDiv = document.getElementById("feedback");
 
-// لتتبع الخيارات المستبعدة في السؤال الحالي
+// سنستخدم هذه المصفوفة لتتبع الخيارات التي تم استبعادها في السؤال الحالي
 let eliminatedIndices = [];
 
 // متغيرات لميزة الاستبعاد اليدوي
-// remainingEliminations: عدد الخيارات التي يمكن للطالبة استبعادها
-// inEliminationMode: حالة التفعيل
-// currentLabels: عناصر label الحالية للسؤال
+// remainingEliminations: عدد الإجابات التي يمكن للطالبة استبعادها حاليًا
+// inEliminationMode: حالة تفعيل وضع الاستبعاد
+// currentLabels: مخزن للعناصر label الخاصة بالخيار الحالي للسؤال لسهولة الوصول إليها عند الاستبعاد
 let remainingEliminations = 0;
 let inEliminationMode = false;
 let currentLabels = [];
@@ -310,7 +309,7 @@ const nextButton = document.getElementById("nextButton");
 const submitButton = document.getElementById("submitButton");
 const resultContainer = document.getElementById("resultContainer");
 
-// إرسال نموذج المعلومات الشخصية
+// عند إرسال نموذج المعلومات الشخصية
 infoForm.addEventListener("submit", function (e) {
   e.preventDefault();
   const name = document.getElementById("studentName").value.trim();
@@ -319,29 +318,25 @@ infoForm.addEventListener("submit", function (e) {
     alert("يرجى إدخال اسم الطالبة والمدرسة قبل بدء الاختبار.");
     return;
   }
-  // إخفاء قسم المعلومات وعرض الاختبار
+  // إخفاء نموذج المعلومات وعرض الاختبار
   document.getElementById("infoSection").style.display = "none";
   quizSection.style.display = "block";
-  // تسجيل البيانات في Google Sheets
+  // إرسال المعلومات إلى Google Sheets
   logVisitor(name, school);
   loadQuestion();
 });
 
-// تحميل السؤال الحالي
+// تحميل السؤال الحالي وعرضه
 function loadQuestion() {
   resultContainer.innerHTML = "";
   const test = tests[currentTestIndex];
   const question = test.questions[currentQuestionIndex];
   questionContainer.innerHTML = "";
-
-  // إنشاء العنصر لعرض نص السؤال
   const questionDiv = document.createElement("div");
   questionDiv.className = "question";
   const questionText = document.createElement("h3");
   questionText.textContent = `${currentQuestionIndex + 1}. ${question.text}`;
   questionDiv.appendChild(questionText);
-
-  // إنشاء الخيارات
   const optionsDiv = document.createElement("div");
   optionsDiv.className = "options";
   question.options.forEach((opt, idx) => {
@@ -350,7 +345,6 @@ function loadQuestion() {
     input.type = "radio";
     input.name = "question";
     input.value = idx;
-    // في حال إعادة الدخول للسؤال، يتم تفعيل الخيار السابق
     if (answers[currentTestIndex] && answers[currentTestIndex][currentQuestionIndex] == idx) {
       input.checked = true;
     }
@@ -358,40 +352,76 @@ function loadQuestion() {
     label.appendChild(document.createTextNode(opt));
     optionsDiv.appendChild(label);
   });
-
   questionDiv.appendChild(optionsDiv);
+
+  // إضافة زر "مفتاح الإجابة" ضمن كل سؤال
+  const keyButton = document.createElement("button");
+  keyButton.type = "button";
+  keyButton.textContent = "مفتاح الإجابة";
+  keyButton.className = "key-button";
+  keyButton.addEventListener("click", function () {
+    // عند الضغط على الزر، يتم تمييز الإجابة الصحيحة وعرض التفسير
+    const q = tests[currentTestIndex].questions[currentQuestionIndex];
+    const labels = optionsDiv.querySelectorAll("label");
+    labels.forEach((lbl, idx) => {
+      lbl.classList.remove("suggested");
+      if (idx === q.correct) {
+        lbl.classList.add("suggested");
+      }
+    });
+    // إنشاء أو تحديث عنصر يحتوي على التفسير أسفل السؤال
+    let hintDiv = questionDiv.querySelector(".hint-div");
+    if (!hintDiv) {
+      hintDiv = document.createElement("div");
+      hintDiv.className = "hint-div";
+      hintDiv.style.marginTop = "1rem";
+      hintDiv.style.padding = "0.5rem";
+      hintDiv.style.backgroundColor = "#f9f5f2";
+      hintDiv.style.border = "1px solid #e0dcd8";
+      hintDiv.style.borderRadius = "4px";
+      questionDiv.appendChild(hintDiv);
+    }
+    hintDiv.innerHTML = `<strong>التفسير:</strong> ${q.hint}`;
+    // تعطيل الزر بعد الاستخدام لمنع الضغط المتكرر
+    keyButton.disabled = true;
+  });
+  questionDiv.appendChild(keyButton);
+
   questionContainer.appendChild(questionDiv);
 
-  // إعادة ضبط حالة الاستبعاد والترشيح
+  // إعادة ضبط حالة الاستبعاد عند تحميل سؤال جديد
   eliminatedIndices = [];
-  currentLabels = optionsDiv.querySelectorAll("label");
-  currentLabels.forEach((lbl) => {
+  // إعادة إظهار جميع الخيارات وتمكينها وإزالة أي تأثيرات
+  const allLabels = optionsDiv.querySelectorAll("label");
+  allLabels.forEach((lbl) => {
     lbl.classList.remove("eliminated", "suggested");
     const input = lbl.querySelector("input");
     input.disabled = false;
     input.checked = !!(answers[currentTestIndex] && answers[currentTestIndex][currentQuestionIndex] == parseInt(input.value, 10));
   });
+  // إظهار زر الاستبعاد وتمكينه إذا لم نكن في وضع النتائج
+  assistButtons.style.display = "flex";
+  eliminateButton.disabled = false;
 
-  // تفعيل مراقبة الضغط على الخيارات أثناء وضع الاستبعاد
+  // تخزين تسميات الخيارات الحالية وتعيين مستمعات الحدث للاستبعاد اليدوي
+  currentLabels = optionsDiv.querySelectorAll("label");
   currentLabels.forEach((lbl, idx) => {
     lbl.addEventListener('click', function(event) {
+      // إذا كانت الطالبة في وضع الاستبعاد، يتم التعامل مع الضغط كاستبعاد وليس اختيار الإجابة
       if (inEliminationMode) {
-        event.preventDefault(); // منع تغيير اختيار الراديو
+        // منع تغيير اختيار الراديو
+        event.preventDefault();
         handleElimination(idx);
       }
     });
   });
 
-  // إظهار أزرار المساعدة
-  assistButtons.style.display = "flex";
-  eliminateButton.disabled = false;
-  suggestButton.disabled = false;
-
-  // إخفاء رسالة التغذية الراجعة السابقة
+  // إخفاء التغذية الراجعة القديمة
   feedbackDiv.style.display = "none";
 
   // تحديث أزرار التنقل
   prevButton.disabled = currentQuestionIndex === 0;
+  // إظهار زر الإرسال في آخر سؤال من آخر اختبار
   const lastQuestion =
     currentTestIndex === tests.length - 1 &&
     currentQuestionIndex === tests[currentTestIndex].questions.length - 1;
@@ -399,7 +429,7 @@ function loadQuestion() {
   nextButton.style.display = lastQuestion ? "none" : "inline-block";
 }
 
-// حفظ الإجابة والتحقق من اختيار
+// حفظ الإجابة المختارة والانتقال للسؤال التالي
 function saveAnswer() {
   const selected = document.querySelector('input[name="question"]:checked');
   if (!selected) {
@@ -411,24 +441,26 @@ function saveAnswer() {
   return true;
 }
 
-// الانتقال للسؤال التالي مع تغذية راجعة
 nextButton.addEventListener("click", () => {
+  // حفظ الإجابة وإذا لم يتم اختيارها نخرج
   if (!saveAnswer()) return;
   const test = tests[currentTestIndex];
   const question = test.questions[currentQuestionIndex];
   const userAns = answers[currentTestIndex][currentQuestionIndex];
   const isCorrect = userAns === question.correct;
-  // عرض التغذية الراجعة
+  // إعداد رسالة التغذية الراجعة
   feedbackDiv.textContent = isCorrect
     ? "إجابة صحيحة، أحسنتِ!"
     : `إجابة غير صحيحة. الإجابة الصحيحة هي: ${question.options[question.correct]}. ${question.hint}`;
   feedbackDiv.className = "feedback " + (isCorrect ? "correct" : "wrong");
   feedbackDiv.style.display = "block";
+  // تعطيل زر التالي مؤقتًا
   nextButton.disabled = true;
-  // بعد ثانيتين الانتقال للسؤال التالي
+  // بعد فترة قصيرة ننتقل للسؤال التالي
   setTimeout(() => {
     feedbackDiv.style.display = "none";
     nextButton.disabled = false;
+    // الانتقال للسؤال التالي أو الاختبار التالي
     if (currentQuestionIndex < test.questions.length - 1) {
       currentQuestionIndex++;
     } else if (currentTestIndex < tests.length - 1) {
@@ -439,8 +471,8 @@ nextButton.addEventListener("click", () => {
   }, 2000);
 });
 
-// العودة للسؤال السابق
 prevButton.addEventListener("click", () => {
+  const test = tests[currentTestIndex];
   if (currentQuestionIndex > 0) {
     currentQuestionIndex--;
   } else if (currentTestIndex > 0) {
@@ -450,10 +482,11 @@ prevButton.addEventListener("click", () => {
   loadQuestion();
 });
 
-// زر الإرسال في آخر سؤال
 submitButton.addEventListener("click", () => {
+  // حفظ الإجابة وإذا لم يتم اختيارها نخرج
   if (!saveAnswer()) return;
-  const question = tests[currentTestIndex].questions[currentQuestionIndex];
+  const test = tests[currentTestIndex];
+  const question = test.questions[currentQuestionIndex];
   const userAns = answers[currentTestIndex][currentQuestionIndex];
   const isCorrect = userAns === question.correct;
   feedbackDiv.textContent = isCorrect
@@ -461,7 +494,9 @@ submitButton.addEventListener("click", () => {
     : `إجابة غير صحيحة. الإجابة الصحيحة هي: ${question.options[question.correct]}. ${question.hint}`;
   feedbackDiv.className = "feedback " + (isCorrect ? "correct" : "wrong");
   feedbackDiv.style.display = "block";
+  // تعطيل زر الإرسال مؤقتًا
   submitButton.disabled = true;
+  // بعد فترة قصيرة نعرض النتائج النهائية
   setTimeout(() => {
     feedbackDiv.style.display = "none";
     submitButton.disabled = false;
@@ -469,68 +504,52 @@ submitButton.addEventListener("click", () => {
   }, 2000);
 });
 
-// زر استبعاد إجابتين (يدوي)
+// زر استبعاد إجابتين: يتيح للطالبة اختيار خيارين لإزالتهما يدويًا
 eliminateButton.addEventListener("click", () => {
+  // إذا كان وضع الاستبعاد مفعّلاً بالفعل، نتجاهل الضغط
   if (inEliminationMode) return;
+  // تفعيل وضع الاستبعاد مع السماح للطالبة بإزالة خيارين
   inEliminationMode = true;
   remainingEliminations = 2;
+  // تعطيل الزر حتى لا يبدأ وضع الاستبعاد مرة أخرى
   eliminateButton.disabled = true;
+  // عرض رسالة إرشادية للتلميذة لاختيار إجابتين لإزالتهما
   feedbackDiv.textContent = "الرجاء اختيار إجابتين لإزالتهما";
   feedbackDiv.className = "feedback";
   feedbackDiv.style.display = "block";
 });
 
-// معالجة استبعاد خيار معين
+// دالة لمعالجة إزالة خيار يدويًا
 function handleElimination(idx) {
   const question = tests[currentTestIndex].questions[currentQuestionIndex];
-  // لا يمكن استبعاد الإجابة الصحيحة أو خيار تم استبعاده بالفعل
+  // لا يمكن إزالة الإجابة الصحيحة أو الخيار الذي تمت إزالته مسبقًا
   if (idx === question.correct || eliminatedIndices.includes(idx)) {
     return;
   }
+  // تطبيق تأثير الاستبعاد وتعطيل الإدخال
   const lbl = currentLabels[idx];
   if (!lbl) return;
   lbl.classList.add("eliminated");
   const input = lbl.querySelector("input");
   input.disabled = true;
   input.checked = false;
+  // إضافة هذا الخيار إلى قائمة المستبعدات
   eliminatedIndices.push(idx);
   remainingEliminations--;
+  // إذا انتهت عمليات الاستبعاد، إيقاف وضع الاستبعاد وإخفاء الرسالة
   if (remainingEliminations <= 0) {
     inEliminationMode = false;
     feedbackDiv.style.display = "none";
   }
 }
 
-// زر ترشيح الإجابة (مفتاح الإجابة)
-suggestButton.addEventListener("click", () => {
-  const question = tests[currentTestIndex].questions[currentQuestionIndex];
-  const labels = questionContainer.querySelectorAll("label");
-  labels.forEach((lbl, idx) => {
-    lbl.classList.remove("suggested");
-    if (idx === question.correct) {
-      lbl.classList.add("suggested");
-    }
-  });
-  let hintDiv = questionContainer.querySelector(".hint-div");
-  if (!hintDiv) {
-    hintDiv = document.createElement("div");
-    hintDiv.className = "hint-div";
-    hintDiv.style.marginTop = "1rem";
-    hintDiv.style.padding = "0.5rem";
-    hintDiv.style.backgroundColor = "#f9f5f2";
-    hintDiv.style.border = "1px solid #e0dcd8";
-    hintDiv.style.borderRadius = "4px";
-    questionContainer.appendChild(hintDiv);
-  }
-  hintDiv.innerHTML = `<strong>التفسير:</strong> ${question.hint}`;
-  suggestButton.disabled = true;
-});
-
-// عرض النتائج النهائية لجميع الأسئلة
+// إظهار النتائج والتعليقات الذكية
 function showResults() {
   questionContainer.innerHTML = "";
   document.getElementById("navigation").style.display = "none";
+  // إخفاء زر المساعدة عند عرض النتائج
   assistButtons.style.display = "none";
+  // إخفاء التغذية الراجعة
   feedbackDiv.style.display = "none";
   let score = 0;
   let total = 0;
@@ -546,7 +565,9 @@ function showResults() {
         `<strong>${question.text}</strong><br>` +
         `إجابتك: <span style="color:${isCorrect ? 'green' : 'red'}">${question.options[userAnswer] ?? 'لم تُجب'}</span>` +
         `<br>الإجابة الصحيحة: ${question.options[question.correct]}` +
-        (!isCorrect ? `<br><em>تعليق:</em> ${question.hint}` : "");
+        (!isCorrect
+          ? `<br><em>تعليق:</em> ${question.hint}`
+          : "");
       resultList.appendChild(li);
     });
   });
@@ -554,9 +575,9 @@ function showResults() {
   resultContainer.appendChild(resultList);
 }
 
-// إرسال البيانات إلى Google Sheets عبر تطبيق Apps Script
+// إرسال البيانات إلى Google Sheets عبر Web App (يجب نشر Apps Script كـ Web App)
 function logVisitor(name, school) {
-  // رابط تطبيق Apps Script الذي زودتني به
+  // تحديث العنوان ليشير إلى تطبيق Apps Script الذي زودتنا به المستخدم.
   const scriptURL = "https://script.google.com/macros/s/AKfycbxwqCJ4m8W1gTKTMgBDIgLcapWE7ICBlAs8zEzXlvDp0nCYZRClrgLGhxNV7Bqg7a4WKw/exec";
   const formData = new FormData();
   formData.append("name", name);
