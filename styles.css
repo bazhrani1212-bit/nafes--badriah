@@ -1,0 +1,131 @@
+/*
+ * ملف الأنماط (CSS) لتحسين مظهر منصة الاختبار.
+ * تم استخدام اتجاه من اليمين إلى اليسار ليتوافق مع اللغة العربية.
+ */
+
+body {
+  font-family: "Tahoma", sans-serif;
+  direction: rtl;
+  margin: 0;
+  padding: 0;
+  background-color: #f5f7fa;
+  color: #333;
+}
+
+header,
+footer {
+  background-color: #006e90;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 0.5rem 0;
+  font-size: 2rem;
+}
+
+/* تنسيق نص الاعتماد في رأس الصفحة */
+.credit {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #ffe49a;
+}
+
+section {
+  padding: 1rem;
+  margin: auto;
+  max-width: 800px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: white;
+  margin-top: 1rem;
+  border-radius: 8px;
+}
+
+form label {
+  display: block;
+  margin: 0.5rem 0 0.25rem;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #0078aa;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.nav-buttons {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.question {
+  margin-bottom: 1.5rem;
+}
+
+.options label {
+  display: block;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+}
+
+.results {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: #e0f7fa;
+  border-radius: 4px;
+}
+
+/* تغذية راجعة للطالبات (صحيحة أو خاطئة) */
+.feedback {
+  margin-top: 1rem;
+  font-size: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  display: none; /* تُظهر عند الحاجة */
+}
+.feedback.correct {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+.feedback.wrong {
+  background-color: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+/* تنسيق أزرار المساعدة (استبعاد وترشيح) */
+.assist-buttons {
+  margin-top: 1rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-start;
+}
+
+/* تأثير على الخيارات بعد الاستبعاد */
+.eliminated {
+  color: #888;
+  text-decoration: line-through;
+}
+
+/* تأثير على الخيار المقترح (الإجابة الصحيحة) */
+.suggested {
+  font-weight: bold;
+  color: #2e7d32;
+}
