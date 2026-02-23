@@ -1,11 +1,10 @@
 /*
- * ملف جافاسكريبت يدير عرض الأسئلة وتسجيل النتائج.
- * يعتمد على بنية بيانات للأسئلة تحاكي نماذج نافس.
- * كما يحتوي على وظائف لإرسال البيانات إلى Google Sheets عبر Web App.
+ * ملف جافاسكريبت يدير عرض الأسئلة وتسجيل النتائج والتغذية الراجعة.
+ * يحتوي على ميزتي “استبعاد إجابتين” يدويًا و“ترشيح الإجابة” وإظهار سببها.
+ * يقوم أيضًا بإرسال بيانات الطالبات إلى Google Sheets عبر تطبيق Apps Script.
  */
 
-// مصفوفة الأسئلة لكل اختبار. كل عنصر يحتوي على عنوان الاختبار ومصفوفة من الأسئلة.
-// تم إدراج الأسئلة الواردة في المذكرة «نافِس علوم سادس – نسخة الطالبة» (الاختبارات 1‑5).
+// تعريف الاختبارات والأسئلة (يمكن إضافة اختبارات أخرى بنفس النمط)
 const tests = [
   {
     title: "الاختبار التجريبي (1)",
@@ -279,6 +278,7 @@ const tests = [
   }
 ];
 
+// مؤشرات لاختبار والسؤال الحالي
 let currentTestIndex = 0;
 let currentQuestionIndex = 0;
 let answers = [];
@@ -291,8 +291,16 @@ const suggestButton = document.getElementById("suggestButton");
 // عنصر التغذية الراجعة
 const feedbackDiv = document.getElementById("feedback");
 
-// مصفوفة تتبع الخيارات المستبعدة للسؤال الحالي
+// لتتبع الخيارات المستبعدة في السؤال الحالي
 let eliminatedIndices = [];
+
+// متغيرات لميزة الاستبعاد اليدوي
+// remainingEliminations: عدد الخيارات التي يمكن للطالبة استبعادها
+// inEliminationMode: حالة التفعيل
+// currentLabels: عناصر label الحالية للسؤال
+let remainingEliminations = 0;
+let inEliminationMode = false;
+let currentLabels = [];
 
 const infoForm = document.getElementById("infoForm");
 const quizSection = document.getElementById("quizSection");
@@ -302,7 +310,7 @@ const nextButton = document.getElementById("nextButton");
 const submitButton = document.getElementById("submitButton");
 const resultContainer = document.getElementById("resultContainer");
 
-// عند إرسال نموذج المعلومات الشخصية
+// إرسال نموذج المعلومات الشخصية
 infoForm.addEventListener("submit", function (e) {
   e.preventDefault();
   const name = document.getElementById("studentName").value.trim();
@@ -311,25 +319,29 @@ infoForm.addEventListener("submit", function (e) {
     alert("يرجى إدخال اسم الطالبة والمدرسة قبل بدء الاختبار.");
     return;
   }
-  // إخفاء نموذج المعلومات وعرض الاختبار
+  // إخفاء قسم المعلومات وعرض الاختبار
   document.getElementById("infoSection").style.display = "none";
   quizSection.style.display = "block";
-  // إرسال المعلومات إلى Google Sheets
+  // تسجيل البيانات في Google Sheets
   logVisitor(name, school);
   loadQuestion();
 });
 
-// تحميل السؤال الحالي وعرضه
+// تحميل السؤال الحالي
 function loadQuestion() {
   resultContainer.innerHTML = "";
   const test = tests[currentTestIndex];
   const question = test.questions[currentQuestionIndex];
   questionContainer.innerHTML = "";
+
+  // إنشاء العنصر لعرض نص السؤال
   const questionDiv = document.createElement("div");
   questionDiv.className = "question";
   const questionText = document.createElement("h3");
   questionText.textContent = `${currentQuestionIndex + 1}. ${question.text}`;
   questionDiv.appendChild(questionText);
+
+  // إنشاء الخيارات
   const optionsDiv = document.createElement("div");
   optionsDiv.className = "options";
   question.options.forEach((opt, idx) => {
@@ -338,6 +350,7 @@ function loadQuestion() {
     input.type = "radio";
     input.name = "question";
     input.value = idx;
+    // في حال إعادة الدخول للسؤال، يتم تفعيل الخيار السابق
     if (answers[currentTestIndex] && answers[currentTestIndex][currentQuestionIndex] == idx) {
       input.checked = true;
     }
@@ -345,23 +358,36 @@ function loadQuestion() {
     label.appendChild(document.createTextNode(opt));
     optionsDiv.appendChild(label);
   });
+
   questionDiv.appendChild(optionsDiv);
   questionContainer.appendChild(questionDiv);
 
   // إعادة ضبط حالة الاستبعاد والترشيح
   eliminatedIndices = [];
-  const allLabels = optionsDiv.querySelectorAll("label");
-  allLabels.forEach((lbl) => {
+  currentLabels = optionsDiv.querySelectorAll("label");
+  currentLabels.forEach((lbl) => {
     lbl.classList.remove("eliminated", "suggested");
     const input = lbl.querySelector("input");
     input.disabled = false;
     input.checked = !!(answers[currentTestIndex] && answers[currentTestIndex][currentQuestionIndex] == parseInt(input.value, 10));
   });
+
+  // تفعيل مراقبة الضغط على الخيارات أثناء وضع الاستبعاد
+  currentLabels.forEach((lbl, idx) => {
+    lbl.addEventListener('click', function(event) {
+      if (inEliminationMode) {
+        event.preventDefault(); // منع تغيير اختيار الراديو
+        handleElimination(idx);
+      }
+    });
+  });
+
+  // إظهار أزرار المساعدة
   assistButtons.style.display = "flex";
   eliminateButton.disabled = false;
   suggestButton.disabled = false;
 
-  // إخفاء التغذية الراجعة القديمة
+  // إخفاء رسالة التغذية الراجعة السابقة
   feedbackDiv.style.display = "none";
 
   // تحديث أزرار التنقل
@@ -373,7 +399,7 @@ function loadQuestion() {
   nextButton.style.display = lastQuestion ? "none" : "inline-block";
 }
 
-// حفظ الإجابة المختارة
+// حفظ الإجابة والتحقق من اختيار
 function saveAnswer() {
   const selected = document.querySelector('input[name="question"]:checked');
   if (!selected) {
@@ -385,22 +411,21 @@ function saveAnswer() {
   return true;
 }
 
-// الزر "التالي"
+// الانتقال للسؤال التالي مع تغذية راجعة
 nextButton.addEventListener("click", () => {
   if (!saveAnswer()) return;
   const test = tests[currentTestIndex];
   const question = test.questions[currentQuestionIndex];
   const userAns = answers[currentTestIndex][currentQuestionIndex];
   const isCorrect = userAns === question.correct;
-  // إعداد رسالة التغذية الراجعة
+  // عرض التغذية الراجعة
   feedbackDiv.textContent = isCorrect
     ? "إجابة صحيحة، أحسنتِ!"
     : `إجابة غير صحيحة. الإجابة الصحيحة هي: ${question.options[question.correct]}. ${question.hint}`;
   feedbackDiv.className = "feedback " + (isCorrect ? "correct" : "wrong");
   feedbackDiv.style.display = "block";
-  // تعطيل زر التالي مؤقتًا
   nextButton.disabled = true;
-  // بعد فترة ننتقل للسؤال التالي
+  // بعد ثانيتين الانتقال للسؤال التالي
   setTimeout(() => {
     feedbackDiv.style.display = "none";
     nextButton.disabled = false;
@@ -414,7 +439,7 @@ nextButton.addEventListener("click", () => {
   }, 2000);
 });
 
-// الزر "السابق"
+// العودة للسؤال السابق
 prevButton.addEventListener("click", () => {
   if (currentQuestionIndex > 0) {
     currentQuestionIndex--;
@@ -425,11 +450,10 @@ prevButton.addEventListener("click", () => {
   loadQuestion();
 });
 
-// زر الإرسال (في آخر سؤال)
+// زر الإرسال في آخر سؤال
 submitButton.addEventListener("click", () => {
   if (!saveAnswer()) return;
-  const test = tests[currentTestIndex];
-  const question = test.questions[currentQuestionIndex];
+  const question = tests[currentTestIndex].questions[currentQuestionIndex];
   const userAns = answers[currentTestIndex][currentQuestionIndex];
   const isCorrect = userAns === question.correct;
   feedbackDiv.textContent = isCorrect
@@ -445,39 +469,41 @@ submitButton.addEventListener("click", () => {
   }, 2000);
 });
 
-// زر استبعاد إجابتين
+// زر استبعاد إجابتين (يدوي)
 eliminateButton.addEventListener("click", () => {
-  const test = tests[currentTestIndex];
-  const question = test.questions[currentQuestionIndex];
-  const numOptions = question.options.length;
-  const labels = questionContainer.querySelectorAll("label");
-  const candidateIndices = [];
-  for (let i = 0; i < numOptions; i++) {
-    if (i !== question.correct && !eliminatedIndices.includes(i)) {
-      candidateIndices.push(i);
-    }
-  }
-  if (candidateIndices.length < 2) {
-    eliminateButton.disabled = true;
-    return;
-  }
-  for (let n = 0; n < 2; n++) {
-    const randomIndex = Math.floor(Math.random() * candidateIndices.length);
-    const idx = candidateIndices.splice(randomIndex, 1)[0];
-    eliminatedIndices.push(idx);
-    const lbl = labels[idx];
-    lbl.classList.add("eliminated");
-    const input = lbl.querySelector("input");
-    input.disabled = true;
-    input.checked = false;
-  }
+  if (inEliminationMode) return;
+  inEliminationMode = true;
+  remainingEliminations = 2;
   eliminateButton.disabled = true;
+  feedbackDiv.textContent = "الرجاء اختيار إجابتين لإزالتهما";
+  feedbackDiv.className = "feedback";
+  feedbackDiv.style.display = "block";
 });
 
-// زر ترشيح الإجابة
+// معالجة استبعاد خيار معين
+function handleElimination(idx) {
+  const question = tests[currentTestIndex].questions[currentQuestionIndex];
+  // لا يمكن استبعاد الإجابة الصحيحة أو خيار تم استبعاده بالفعل
+  if (idx === question.correct || eliminatedIndices.includes(idx)) {
+    return;
+  }
+  const lbl = currentLabels[idx];
+  if (!lbl) return;
+  lbl.classList.add("eliminated");
+  const input = lbl.querySelector("input");
+  input.disabled = true;
+  input.checked = false;
+  eliminatedIndices.push(idx);
+  remainingEliminations--;
+  if (remainingEliminations <= 0) {
+    inEliminationMode = false;
+    feedbackDiv.style.display = "none";
+  }
+}
+
+// زر ترشيح الإجابة (مفتاح الإجابة)
 suggestButton.addEventListener("click", () => {
-  const test = tests[currentTestIndex];
-  const question = test.questions[currentQuestionIndex];
+  const question = tests[currentTestIndex].questions[currentQuestionIndex];
   const labels = questionContainer.querySelectorAll("label");
   labels.forEach((lbl, idx) => {
     lbl.classList.remove("suggested");
@@ -500,7 +526,7 @@ suggestButton.addEventListener("click", () => {
   suggestButton.disabled = true;
 });
 
-// عرض النتائج النهائية
+// عرض النتائج النهائية لجميع الأسئلة
 function showResults() {
   questionContainer.innerHTML = "";
   document.getElementById("navigation").style.display = "none";
@@ -520,9 +546,7 @@ function showResults() {
         `<strong>${question.text}</strong><br>` +
         `إجابتك: <span style="color:${isCorrect ? 'green' : 'red'}">${question.options[userAnswer] ?? 'لم تُجب'}</span>` +
         `<br>الإجابة الصحيحة: ${question.options[question.correct]}` +
-        (!isCorrect
-          ? `<br><em>تعليق:</em> ${question.hint}`
-          : "");
+        (!isCorrect ? `<br><em>تعليق:</em> ${question.hint}` : "");
       resultList.appendChild(li);
     });
   });
@@ -530,9 +554,10 @@ function showResults() {
   resultContainer.appendChild(resultList);
 }
 
-// إرسال البيانات إلى Google Sheets عبر تطبيق ويب
+// إرسال البيانات إلى Google Sheets عبر تطبيق Apps Script
 function logVisitor(name, school) {
-  const scriptURL = "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec";
+  // رابط تطبيق Apps Script الذي زودتني به
+  const scriptURL = "https://script.google.com/macros/s/AKfycbxwqCJ4m8W1gTKTMgBDIgLcapWE7ICBlAs8zEzXlvDp0nCYZRClrgLGhxNV7Bqg7a4WKw/exec";
   const formData = new FormData();
   formData.append("name", name);
   formData.append("school", school);
